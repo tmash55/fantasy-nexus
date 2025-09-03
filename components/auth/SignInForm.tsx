@@ -72,10 +72,10 @@ export default function SignInForm({ className, ...props }: React.ComponentProps
               redirectTo: redirectTo,
             }),
           )
-          router.push("/adp")
+          router.push("/nfl/rankings")
         } else {
           // Use redirect URL if provided, otherwise default
-          const destination = redirectTo || "/adp"
+          const destination = redirectTo || "/nfl/rankings"
           router.push(destination)
         }
         router.refresh()
