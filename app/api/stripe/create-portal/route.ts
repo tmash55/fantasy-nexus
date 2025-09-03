@@ -25,23 +25,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user?.id)
-      .single();
+    // Get customer_id from subscriptions (brand-scoped)
+    const { data: sub } = await supabase
+      .from('subscriptions')
+      .select('customer_id')
+      .eq('user_id', user.id)
+      .eq('brand_key', 'fantasy_nexus')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (!data?.customer_id) {
+    if (!sub?.customer_id) {
       return NextResponse.json(
-        {
-          error: "You don't have a billing account yet. Make a purchase first.",
-        },
+        { error: "No billing account found. Make a purchase first." },
         { status: 400 }
       );
     }
 
     const stripePortalUrl = await createCustomerPortal({
-      customerId: data.customer_id,
+      customerId: sub.customer_id,
       returnUrl: body.returnUrl,
     });
 

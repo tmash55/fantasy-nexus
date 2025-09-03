@@ -19,49 +19,44 @@ const config = {
     plans: [
       {
         // REQUIRED — we use this to find the plan in the webhook (for instance if you want to update the user's credits based on the plan)
-        priceId:
-          process.env.NODE_ENV === "development"
-            ? "price_1Niyy5AxyNprDp7iZIqEyD2h"
-            : "price_456",
+        priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID as string,
         //  REQUIRED - Name of the plan, displayed on the pricing page
-        name: "Starter",
+        name: "Fantasy Nexus Pro",
         // A friendly description of the plan, displayed on the pricing page. Tip: explain why this plan and not others
-        description: "Perfect for small projects",
+        description: "Win your league with the best tools in the business",
         // The price you want to display, the one user will be charged on Stripe.
-        price: 99,
+        price: 9.99,
         // If you have an anchor price (i.e. $29) that you want to display crossed out, put it here. Otherwise, leave it empty
-        priceAnchor: 149,
+        priceAnchor: 14.99,
+        // Mark as featured
         features: [
           {
-            name: "NextJS boilerplate",
+            name: "NFL Projections",
           },
-          { name: "User oauth" },
-          { name: "Database" },
-          { name: "Emails" },
+          { name: "Start/Sit Analysis" },
+          { name: "ADP Calculator" },
+          { name: "Roster Optimizer" },
         ],
       },
       {
-        priceId:
-          process.env.NODE_ENV === "development"
-            ? "price_1O5KtcAxyNprDp7iftKnrrpw"
-            : "price_456",
-        // This plan will look different on the pricing page, it will be highlighted. You can only have one plan with isFeatured: true
+        // Season Pass (one-time)
+        priceId: process.env.NEXT_PUBLIC_STRIPE_SEASON_PASS_PRICE_ID as string,
+        name: "Season Pass",
+        description: "One-time access through the Super Bowl",
+        price: 24.99,
+        priceAnchor: 39.99,
         isFeatured: true,
-        name: "Advanced",
-        description: "You need more power",
-        price: 149,
-        priceAnchor: 299,
+        // Optional flag to identify season pass in UI
+        // @ts-ignore - non-typed helper key for UI
+        isSeasonPass: true,
         features: [
-          {
-            name: "NextJS boilerplate",
-          },
-          { name: "User oauth" },
-          { name: "Database" },
-          { name: "Emails" },
-          { name: "1 year of updates" },
-          { name: "24/7 support" },
+          { name: "Full Weekly Rankings" },
+          { name: "Custom Scoring Filters" },
+          { name: "Unlimited Start/Sit" },
+          { name: "Vegas Insights" },
         ],
       },
+      
     ],
   },
   aws: {
@@ -74,9 +69,9 @@ const config = {
     // REQUIRED — Email 'From' field to be used when sending magic login links
     fromNoReply: `Fantasy Nexus <noreply@resend.fantasynexus.io>`,
     // REQUIRED — Email 'From' field to be used when sending other emails, like abandoned carts, updates etc..
-    fromAdmin: `Tyler at Fantasy Nexus <tyler.maschoff@gmail.com>`,
+    fromAdmin: `Tyler at Fantasy Nexus <tyler@fantasynexus.io>`,
     // Email shown to customer if need support. Leave empty if not needed => if empty, set up Crisp above, otherwise you won't be able to offer customer support."
-    supportEmail: "tyler.maschoff@gmail.com",
+    supportEmail: "tyler@fantasynexus.io",
   },
   colors: {
     // REQUIRED — This color will be reflected on the whole app outside of the document (loading bar, Chrome tabs, etc..)
@@ -85,9 +80,9 @@ const config = {
   },
   auth: {
     // REQUIRED — the path to log in users. It's use to protect private routes (like /dashboard). It's used in apiClient (/libs/api.js) upon 401 errors from our API
-    loginUrl: "/",
+    loginUrl: "/sign-in",
     // REQUIRED — the path you want to redirect users after successfull login (i.e. /dashboard, /private). This is normally a private page for users to manage their accounts. It's used in apiClient (/libs/api.js) upon 401 errors from our API & in ButtonSignin.js
-    callbackUrl: "/",
+    callbackUrl: "/nfl/rankings",
   },
 } as ConfigProps;
 

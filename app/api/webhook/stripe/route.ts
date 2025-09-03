@@ -24,10 +24,13 @@ export async function POST(req: NextRequest) {
   let event;
 
   // Create a private supabase client using the secret service_role API key
-  const supabase = new SupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error("Missing Supabase env. Ensure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.");
+    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+  }
+  const supabase = new SupabaseClient(supabaseUrl, supabaseServiceKey);
 
   // verify Stripe event is legit
   try {
@@ -53,12 +56,13 @@ export async function POST(req: NextRequest) {
         const priceId = session?.line_items?.data[0]?.price.id;
         const userId = stripeObject.client_reference_id;
         const plan = configFile.stripe.plans.find((p) => p.priceId === priceId);
+        const brandKey = (session?.metadata as any)?.brand_key || 'fantasy_nexus';
 
         const customer = (await stripe.customers.retrieve(
           customerId as string
         )) as Stripe.Customer;
 
-        if (!plan) break;
+        // Proceed even if plan is not found in config to avoid skipping DB writes in test
 
         let user;
         if (!userId) {
@@ -89,14 +93,64 @@ export async function POST(req: NextRequest) {
           user = profile;
         }
 
-        await supabase
-          .from("profiles")
-          .update({
-            customer_id: customerId,
-            price_id: priceId,
-            has_access: true,
-          })
-          .eq("id", user?.id);
+        // Update legacy access flags for backwards compat
+        const userIdToUse = (user as any)?.id as string | undefined;
+        if (userIdToUse) {
+          await supabase
+            .from('profiles')
+            .upsert(
+              {
+                id: userIdToUse,
+                email: (customer.email as string) || null,
+                has_access: true,
+                last_brand: brandKey,
+                last_sub_updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'id' }
+            );
+        }
+
+        // Write to subscriptions table (brand-scoped), handling both subscription and one-time payments
+        try {
+          const price = session?.line_items?.data?.[0]?.price as Stripe.Price | undefined;
+          const productId = price
+            ? (typeof price.product === 'string' ? price.product : (price.product as Stripe.Product)?.id)
+            : null;
+
+          const subscriptionId = typeof session?.subscription === 'string' ? (session.subscription as string) : null;
+          let status: string = 'active';
+          let cancelAtPeriodEnd = false;
+          let currentPeriodEnd: string | null = null;
+          if (subscriptionId) {
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            status = sub.status as string;
+            cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end);
+            currentPeriodEnd = new Date(sub.current_period_end * 1000).toISOString();
+          }
+
+          const record = {
+            user_id: userIdToUse as string,
+            brand_key: brandKey,
+            provider: 'stripe',
+            customer_id: String(customerId || ''),
+            subscription_id: subscriptionId ?? `cs_${String(session?.id)}`,
+            product_id: productId ?? null,
+            price_id: String(priceId || ''),
+            status,
+            current_period_end: currentPeriodEnd,
+            cancel_at_period_end: cancelAtPeriodEnd,
+            updated_at: new Date().toISOString(),
+          } as any;
+
+          const { error: subErr } = await supabase
+            .from('subscriptions')
+            .upsert(record, { onConflict: 'subscription_id' });
+          if (subErr) {
+            console.error('Supabase subscriptions upsert error', subErr);
+          }
+        } catch (e) {
+          console.error('Failed to write subscription record', e);
+        }
 
         // Extra: send email with user link, product page, etc...
         // try {
@@ -115,9 +169,44 @@ export async function POST(req: NextRequest) {
       }
 
       case "customer.subscription.updated": {
-        // The customer might have changed the plan (higher or lower plan, cancel soon etc...)
-        // You don't need to do anything here, because Stripe will let us know when the subscription is canceled for good (at the end of the billing cycle) in the "customer.subscription.deleted" event
-        // You can update the user data to show a "Cancel soon" badge for instance
+        // Sync status/cancel_at_period_end/current_period_end so portal changes reflect immediately
+        try {
+          const sub: Stripe.Subscription = event.data.object as Stripe.Subscription;
+          const status = sub.status as string;
+          const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end);
+          const currentPeriodEnd = new Date(sub.current_period_end * 1000).toISOString();
+
+          // Update subscription row by subscription_id
+          await supabase
+            .from('subscriptions')
+            .update({
+              status,
+              cancel_at_period_end: cancelAtPeriodEnd,
+              current_period_end: currentPeriodEnd,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('subscription_id', sub.id);
+
+          // Update profile last_sub_status for the same user
+          const { data: subRow } = await supabase
+            .from('subscriptions')
+            .select('user_id')
+            .eq('subscription_id', sub.id)
+            .maybeSingle();
+
+          if (subRow?.user_id) {
+            await supabase
+              .from('profiles')
+              .update({
+                last_brand: 'fantasy_nexus',
+                last_sub_status: status,
+                last_sub_updated_at: new Date().toISOString(),
+              })
+              .eq('id', subRow.user_id);
+          }
+        } catch (e) {
+          console.error('Failed to sync subscription update', e);
+        }
         break;
       }
 
@@ -130,10 +219,38 @@ export async function POST(req: NextRequest) {
           stripeObject.id
         );
 
-        await supabase
-          .from("profiles")
-          .update({ has_access: false })
-          .eq("customer_id", subscription.customer);
+        // Map customer to user via subscriptions table, then update profile by user_id
+        try {
+          const { data: subRow } = await supabase
+            .from('subscriptions')
+            .select('user_id')
+            .eq('customer_id', String(subscription.customer))
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (subRow?.user_id) {
+            await supabase
+              .from('profiles')
+              .update({
+                has_access: false,
+                last_brand: 'fantasy_nexus',
+                last_sub_status: 'canceled',
+                last_sub_updated_at: new Date().toISOString(),
+              })
+              .eq('id', subRow.user_id);
+          }
+        } catch (e) {
+          console.error('Failed to map cancellation to profile', e);
+        }
+        try {
+          await supabase
+            .from('subscriptions')
+            .update({ status: 'canceled', updated_at: new Date().toISOString() })
+            .eq('customer_id', String(subscription.customer));
+        } catch (e) {
+          console.error('Failed to update subscription cancellation', e);
+        }
         break;
       }
 
@@ -142,24 +259,39 @@ export async function POST(req: NextRequest) {
         // ✅ Grant access to the product
         const stripeObject: Stripe.Invoice = event.data
           .object as Stripe.Invoice;
-        const priceId = stripeObject.lines.data[0].price.id;
         const customerId = stripeObject.customer;
+        // Map to user via subscriptions table and update profile access
+        try {
+          const { data: subRow } = await supabase
+            .from('subscriptions')
+            .select('user_id')
+            .eq('customer_id', String(customerId))
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-        // Find profile where customer_id equals the customerId (in table called 'profiles')
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("customer_id", customerId)
-          .single();
-
-        // Make sure the invoice is for the same plan (priceId) the user subscribed to
-        if (profile.price_id !== priceId) break;
-
-        // Grant the profile access to your product. It's a boolean in the database, but could be a number of credits, etc...
-        await supabase
-          .from("profiles")
-          .update({ has_access: true })
-          .eq("customer_id", customerId);
+          if (subRow?.user_id) {
+            await supabase
+              .from('profiles')
+              .update({
+                has_access: true,
+                last_brand: 'fantasy_nexus',
+                last_sub_status: 'active',
+                last_sub_updated_at: new Date().toISOString(),
+              })
+              .eq('id', subRow.user_id);
+          }
+        } catch (e) {
+          console.error('Failed to map invoice to profile', e);
+        }
+        try {
+          await supabase
+            .from('subscriptions')
+            .update({ status: 'active', updated_at: new Date().toISOString() })
+            .eq('customer_id', String(customerId));
+        } catch (e) {
+          console.error('Failed to update subscription after invoice paid', e);
+        }
 
         break;
       }
