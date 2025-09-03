@@ -93,7 +93,7 @@ function MobileRankingsTable({
   onRowClick: (projKey: string) => void
   rankByProjKey: Map<string, number>
 }) {
-  const first = items.slice(0, Math.min(5, items.length))
+  const first = isPro ? items : items.slice(0, Math.min(5, items.length))
   const next = isPro ? [] : items.slice(5, Math.min(10, items.length))
   return (
     <div className="space-y-3">

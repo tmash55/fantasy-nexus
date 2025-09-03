@@ -193,43 +193,9 @@ const Header = () => {
           </TooltipProvider>
         </div>
 
-        {/* Theme toggle + Auth actions + Mobile menu */}
+        {/* Theme toggle (desktop), Auth actions, Mobile menu */}
         <div className="flex justify-end items-center gap-2 flex-1">
-          <ThemeToggle />
-
-          <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-            <SheetTrigger asChild className="md:hidden">
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Menu className="h-4 w-4" />
-                <span className="sr-only">Toggle navigation menu</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-80">
-              <SheetHeader>
-                <SheetTitle className="text-left">Navigation</SheetTitle>
-              </SheetHeader>
-              <nav className="flex flex-col gap-2 mt-6">
-                {allNavLinks.map((item) => {
-                  const Icon = item.icon
-                  const isActive = pathname === item.href
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
-                        isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted",
-                      )}
-                    >
-                      <Icon className="w-4 h-4 flex-shrink-0" />
-                      <span className="font-medium">{item.label}</span>
-                    </Link>
-                  )
-                })}
-              </nav>
-            </SheetContent>
-          </Sheet>
+          <div className="hidden md:block">{themeToggle}</div>
 
           {user ? (
             <DropdownMenu>
@@ -280,6 +246,48 @@ const Header = () => {
               </Button>
             </Link>
           )}
+
+          <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+            <SheetTrigger asChild className="md:hidden">
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Menu className="h-4 w-4" />
+                <span className="sr-only">Toggle navigation menu</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-80">
+              <div className="flex flex-col h-full">
+                <SheetHeader>
+                  <SheetTitle className="text-left">Navigation</SheetTitle>
+                </SheetHeader>
+                <nav className="flex flex-col gap-2 mt-6">
+                  {allNavLinks.map((item) => {
+                    const Icon = item.icon
+                    const isActive = pathname === item.href
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
+                          isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted",
+                        )}
+                      >
+                        <Icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="font-medium">{item.label}</span>
+                      </Link>
+                    )
+                  })}
+                </nav>
+                <div className="mt-auto pt-4 border-t">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-sm text-muted-foreground">Theme</span>
+                    {themeToggle}
+                  </div>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
       </nav>
     </header>
