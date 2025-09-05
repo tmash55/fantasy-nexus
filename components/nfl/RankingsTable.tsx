@@ -5,7 +5,7 @@ import type { FantasyPosition, NflRankItem } from "@/types/nfl"
 import { Badge } from "@/components/ui/badge"
 import { PlayerBadge, getPlayerBadges } from "@/components/ui/player-badge"
 import { useQuery } from "@tanstack/react-query"
-import { formatMatchup, teamAbbrFrom, teamLogoPath } from "@/lib/nfl-teams"
+import { formatMatchup, teamAbbrFrom, teamLogoPath, isRoofedStadium } from "@/lib/nfl-teams"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Clock, MapPin, Lock } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
@@ -239,9 +239,11 @@ function MobileGameInfo({ item, index }: { item: NflRankItem; index?: number }) 
   // Format: @SEA • 49.5 | SF -2.5 • Team: 24.5
   const oppDisplay = `${isPlayerAway ? "@" : ""}${opponentAbbr}`
   const spreadDisplay = typeof spread === "number" ? `${homeAbbr} ${spread > 0 ? `+${spread}` : spread}` : null
-  const gameInfo = [oppDisplay, typeof total === "number" ? total.toFixed(1) : null, spreadDisplay]
+  const baseInfo = [oppDisplay, typeof total === "number" ? total.toFixed(1) : null, spreadDisplay]
     .filter(Boolean)
     .join(" • ")
+  const dome = (() => { try { return isRoofedStadium(homeAbbr) } catch { return false } })()
+  const gameInfo = dome ? `${baseInfo} • 🏟️` : baseInfo
 
   return (
     <div className="flex items-center gap-2 p-3 bg-muted/20 rounded-lg border border-border/40">
@@ -623,7 +625,17 @@ function DesktopGameEnvCells({ item, index }: { item: NflRankItem; index: number
         )}
       </div>
       <div className="w-44 text-center">
-        <div className="font-semibold text-foreground text-base">{envStr || "—"}</div>
+        <div className="font-semibold text-foreground text-base flex items-center justify-center gap-1.5">
+          {envStr || "—"}
+          {(() => {
+            try {
+              const roof = isRoofedStadium(homeAbbr)
+              return roof ? (
+                <span title="Dome/Roofed stadium" aria-label="Dome" className="inline-block align-middle">🏟️</span>
+              ) : null
+            } catch { return null }
+          })()}
+        </div>
         <div className="text-xs text-muted-foreground mt-1">Game Environment</div>
       </div>
       {/* Team Total column hidden for now */}

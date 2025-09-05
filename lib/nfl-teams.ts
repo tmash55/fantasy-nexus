@@ -104,3 +104,25 @@ export function teamLogoPath(input: string | null | undefined): string | null {
 }
 
 
+// Teams that play home games in roofed/dome/retractable-roof stadiums
+// Note: Retractable roofs may open; we mark these as roof-capable for weather-independent environments
+export const ROOFED_HOME_ABBRS: Set<NflTeamAbbr> = new Set([
+  'ARI', // State Farm Stadium (retractable)
+  'ATL', // Mercedes-Benz Stadium (retractable)
+  'DAL', // AT&T Stadium (retractable)
+  'DET', // Ford Field (fixed)
+  'HOU', // NRG Stadium (retractable)
+  'IND', // Lucas Oil Stadium (retractable)
+  'LAC', // SoFi Stadium (roofed)
+  'LAR', // SoFi Stadium (roofed)
+  'LV',  // Allegiant Stadium (fixed)
+  'MIN', // U.S. Bank Stadium (fixed)
+  'NO',  // Caesars Superdome (fixed)
+])
+
+export function isRoofedStadium(input: string | null | undefined): boolean {
+  const abbr = teamAbbrFrom(input ?? '')
+  return abbr ? ROOFED_HOME_ABBRS.has(abbr) : false
+}
+
+

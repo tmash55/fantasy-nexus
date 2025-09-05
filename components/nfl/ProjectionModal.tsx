@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { teamLogoPath, teamAbbrFrom } from "@/lib/nfl-teams"
+import { teamLogoPath, teamAbbrFrom, isRoofedStadium } from "@/lib/nfl-teams"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useRouter } from "next/navigation"
 import {
@@ -86,7 +86,10 @@ export default function ProjectionModal({ projKey, onClose }: { projKey: string 
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-5xl w-[95vw] max-h-[95vh] overflow-y-auto overflow-x-hidden p-0">
+      <DialogContent
+        className="max-w-5xl w-[95vw] max-h-[95vh] overflow-y-auto overflow-x-hidden p-0 left-1/2 -translate-x-1/2"
+        style={{ scrollbarGutter: "stable both-edges" }}
+      >
         {isLoading && (
           <div className="space-y-6 p-4 sm:p-6">
             <div className="flex items-center gap-4">
@@ -175,7 +178,7 @@ export default function ProjectionModal({ projKey, onClose }: { projKey: string 
                             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 p-3 bg-background/60 rounded-lg border border-border/40">
                               <div className="flex items-center gap-2 min-w-0">
                                 <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                                <span className="font-medium text-sm truncate">
+                                <span className="font-medium text-sm truncate flex items-center gap-1.5">
                                   {(() => {
                                     const playerAbbr = String(id.team_abbr || id.team_name || "").toUpperCase()
                                     const homeAbbr = teamAbbrFrom(home) || String(home).slice(0, 3).toUpperCase()
@@ -190,7 +193,9 @@ export default function ProjectionModal({ projKey, onClose }: { projKey: string 
                                         ? away
                                         : String(away)
                                     const total = (data as any)?.event_total
-                                    return `${isAway ? "@" : "vs"} ${oppName}${total ? ` • O/U ${total}` : ""}`
+                                    const base = `${isAway ? "@" : "vs"} ${oppName}${total ? ` • O/U ${total}` : ""}`
+                                    const dome = (() => { try { return isRoofedStadium(homeAbbr) } catch { return false } })()
+                                    return dome ? `${base} • 🏟️` : base
                                   })()}
                                 </span>
                               </div>
