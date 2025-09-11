@@ -11,10 +11,10 @@ import ProjectionModal from "@/components/nfl/ProjectionModal"
 import RankingsTable from "@/components/nfl/RankingsTable"
 import { getWeekWindowForDate, isWithinWindow } from "@/lib/nfl-weeks"
 
-type QueryKey = ["nfl-rankings", FantasyProfile, FantasyPosition]
+type QueryKey = ["nfl-rankings", FantasyProfile, FantasyPosition, number, number]
 
-async function fetchRankings(profile: FantasyProfile, position: FantasyPosition) {
-  const res = await fetch(`/api/nfl/rankings?profile=${profile}&position=${position}`)
+async function fetchRankings(profile: FantasyProfile, position: FantasyPosition, seasonYear: number, week: number) {
+  const res = await fetch(`/api/nfl/rankings?profile=${profile}&position=${position}&season=${seasonYear}&week=${week}`)
   if (!res.ok) throw new Error("Failed to load rankings")
   const json = await res.json()
   return json.data.items as NflRankItem[]
@@ -31,28 +31,23 @@ export default function NflRankingsPage() {
   const position: FantasyPosition = filters.position
   const [selectedProjKey, setSelectedProjKey] = useState<string | null>(null)
 
+  const now = new Date()
+  const window = getWeekWindowForDate(now)
+  console.log(`[rankings-page] client week calculation:`, { week: window.week, seasonYear: window.seasonYear })
+
   const {
     data: items = [],
     isLoading,
     isError,
     refetch,
   } = useQuery({
-    queryKey: useMemo(() => ["nfl-rankings", profile, position] as QueryKey, [profile, position]),
-    queryFn: () => fetchRankings(profile, position),
+    queryKey: useMemo(() => ["nfl-rankings", profile, position, window.seasonYear, window.week] as QueryKey, [profile, position, window.seasonYear, window.week]),
+    queryFn: () => fetchRankings(profile, position, window.seasonYear, window.week),
     staleTime: 60_000,
   })
 
-  // Compute current NFL week window and filter items by commence_time if present
-  const now = new Date()
-  const window = getWeekWindowForDate(now)
-  const weekItems = useMemo(() => {
-    return items.filter((it) => {
-      if (!it.commence_time) return false
-      const dt = new Date(it.commence_time)
-      if (isNaN(dt.getTime())) return false
-      return isWithinWindow(dt, window)
-    })
-  }, [items, window])
+  // Trust API week scoping; include items regardless of commence_time
+  const weekItems = items
 
   return (
     <>

@@ -22,6 +22,8 @@ export async function GET(request: Request) {
     const positionParam = searchParams.get('position')
     const eventId = searchParams.get('event_id')
     const limitParam = searchParams.get('limit')
+    const weekParam = searchParams.get('week')
+    const seasonParam = searchParams.get('season')
 
     const allowedProfiles: FantasyProfile[] = [
       'half_ppr_4pt',
@@ -43,11 +45,15 @@ export async function GET(request: Request) {
 
     // Build week-scoped key: nfl:rankcache:WEEK:{season}:{week2}:{profile}:{position}
     const now = new Date()
-    const { week, seasonYear } = getWeekWindowForDate(now)
-    const week2 = String(week).padStart(2, '0')
+    const computed = getWeekWindowForDate(now)
+    const seasonYear = seasonParam && !Number.isNaN(Number(seasonParam)) ? Number(seasonParam) : computed.seasonYear
+    const weekNum = weekParam && !Number.isNaN(Number(weekParam)) ? Math.max(1, Math.min(25, Number(weekParam))) : computed.week
+    const week2 = String(weekNum).padStart(2, '0')
     const key = `nfl:rankcache:WEEK:${seasonYear}:${week2}:${profile}:${position}`
+    console.info(`[nfl-rankings] season=${seasonYear} week=${weekNum} profile=${profile} position=${position} key=${key}`)
 
     let records: RankcacheRecord | null = null
+    let usedWeekNum = weekNum
     // Prefer list form if present
     try {
       const list = await redis.lrange<string | NflRankItem>(key, 0, -1)
@@ -83,6 +89,44 @@ export async function GET(request: Request) {
       }
     }
 
+    // If still empty and no explicit week override was provided, try the next week as a safety fallback
+    if ((!records || records.length === 0) && !weekParam) {
+      const altWeekNum = Math.min(25, weekNum + 1)
+      const altWeek2 = String(altWeekNum).padStart(2, '0')
+      const altKey = `nfl:rankcache:WEEK:${seasonYear}:${altWeek2}:${profile}:${position}`
+      console.info(`[nfl-rankings] primary key empty, trying alt week key=${altKey}`)
+      try {
+        const list = await redis.lrange<string | NflRankItem>(altKey, 0, -1)
+        if (Array.isArray(list) && list.length > 0) {
+          const parsedList = list
+            .map((entry) => {
+              if (typeof entry === 'string') {
+                try { return JSON.parse(entry) as NflRankItem } catch { return null }
+              }
+              return entry as NflRankItem
+            })
+            .filter(Boolean) as NflRankItem[]
+          records = parsedList
+          usedWeekNum = altWeekNum
+        }
+      } catch (_) {
+        // ignore
+      }
+
+      if (!records || records.length === 0) {
+        const raw = await redis.get<string | RankcacheRecord | Record<string, any>>(altKey)
+        if (raw) {
+          let parsedAny: any = raw
+          if (typeof raw === 'string') {
+            try { parsedAny = JSON.parse(raw) } catch { parsedAny = raw }
+          }
+          if (Array.isArray(parsedAny)) { records = parsedAny as RankcacheRecord; usedWeekNum = altWeekNum }
+          else if (parsedAny && typeof parsedAny === 'object' && Array.isArray((parsedAny as any).items)) { records = (parsedAny as any).items; usedWeekNum = altWeekNum }
+          else if (parsedAny && typeof parsedAny === 'object') { records = Object.values(parsedAny) as RankcacheRecord; usedWeekNum = altWeekNum }
+        }
+      }
+    }
+
     // Optional limit and normalization
     let items = (records || []).map((r) => ({
       ...r,
@@ -93,6 +137,7 @@ export async function GET(request: Request) {
     }
 
     if (!items || items.length === 0) {
+      console.info(`[nfl-rankings] items=0 for key=${key}`)
       return NextResponse.json({ success: true, data: { profile, position, items: [] as NflRankItem[] } }, {
         headers: {
           'Cache-Control': 'public, max-age=60, stale-while-revalidate=60',
@@ -109,7 +154,8 @@ export async function GET(request: Request) {
       updatedAt: new Date().toISOString(),
     }
 
-    return new NextResponse(JSON.stringify({ success: true, data: response }), {
+    console.info(`[nfl-rankings] items=${items.length} for key=${key} (weekUsed=${usedWeekNum})`)
+    return new NextResponse(JSON.stringify({ success: true, data: response, meta: { seasonYear, week: usedWeekNum, key } }), {
       headers: {
         'Content-Type': 'application/json',
         'Cache-Control': 'public, max-age=60, stale-while-revalidate=60',

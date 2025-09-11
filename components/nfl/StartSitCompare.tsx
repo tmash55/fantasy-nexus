@@ -41,13 +41,14 @@ export default function StartSitCompare() {
     return (tdPoints === 6 ? "standard_6pt" : "standard_4pt") as FantasyProfile
   }, [scoringFormat, tdPoints])
 
+  const ww = getWeekWindowForDate(new Date())
   const { data: rankList = [] } = useQuery({
-    queryKey: useMemo(() => ["start-sit-rankings", profile] as const, [profile]),
+    queryKey: useMemo(() => ["start-sit-rankings", profile, ww.seasonYear, ww.week] as const, [profile, ww.seasonYear, ww.week]),
     queryFn: async () => {
       const positions: FantasyPosition[] = ["QB", "RB", "WR", "TE"]
       const results = await Promise.all(
         positions.map(async (pos) => {
-          const res = await fetch(`/api/nfl/rankings?profile=${profile}&position=${pos}`)
+          const res = await fetch(`/api/nfl/rankings?profile=${profile}&position=${pos}&season=${ww.seasonYear}&week=${ww.week}`)
           if (!res.ok) return [] as NflRankItem[]
           const json = await res.json()
           return (json?.data?.items ?? []) as NflRankItem[]
@@ -75,7 +76,7 @@ export default function StartSitCompare() {
   const compareKeys = useMemo(() => (selected.map((s) => s?.proj_key).filter(Boolean) as string[]), [selected])
 
   const { data, isFetching, refetch } = useQuery({
-    queryKey: useMemo(() => ["start-sit-compare", compareKeys] as const, [compareKeys]),
+    queryKey: useMemo(() => ["start-sit-compare", compareKeys, ww.seasonYear, ww.week] as const, [compareKeys, ww.seasonYear, ww.week]),
     queryFn: async () => {
       if (compareKeys.length < 2) return { items: [] as CompareItem[] }
       const res = await fetch("/api/start-sit/compare", {
