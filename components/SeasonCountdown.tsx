@@ -27,7 +27,7 @@ export default function SeasonCountdown({ deadline, className }: { deadline: str
   return (
     <div className={className}>
       <span className="inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-semibold bg-orange-500/10 text-orange-600 border border-orange-500/30">
-        ⏳ Offer ends in {days}d {hours}h {minutes}m (Week 1 kickoff)
+        ⏳ Offer ends in {days}d {hours}h {minutes}m
       </span>
     </div>
   )

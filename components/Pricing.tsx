@@ -120,10 +120,10 @@ const Pricing = () => {
                 />
               ) : null}
               <SeasonCountdown
-                deadline={new Date("2025-09-09T17:00:00Z")}
+                deadline={new Date("2025-10-01T17:00:00Z")}
                 className="flex items-center justify-center"
               />
-              <p className="text-center text-xs text-muted-foreground">Offer Ends after MNF Week 1</p>
+              <p className="text-center text-xs text-muted-foreground">Offer Ends October 1st (after Week 4)</p>
               <p className="w-full flex items-center justify-center text-xs text-muted-foreground gap-1.5">
                 <Lock className="h-3.5 w-3.5" /> Secure Stripe Checkout
               </p>
